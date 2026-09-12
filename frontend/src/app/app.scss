@@ -1,0 +1,15 @@
+.topbar {
+  flex-wrap: wrap;
+}
+
+.status-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .nav-links {
+    order: 3;
+    width: 100%;
+    gap: var(--space-md);
+  }
+}

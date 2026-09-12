@@ -1,0 +1,11 @@
+backend/.venv/
+backend/yari.db
+backend/yari.db-wal
+backend/yari.db-shm
+backend/.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+__pycache__/
+*.pyc
+.DS_Store

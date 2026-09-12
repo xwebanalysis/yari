@@ -1,0 +1,182 @@
+<div class="route-container">
+  <header class="section-header">
+    <div>
+      <h1 class="t-heading">{{ 'FUZZING_TITLE' | t }}</h1>
+      <span class="t-label">{{ 'FUZZING_SUBTITLE' | t }}</span>
+    </div>
+    <span class="t-label safety-note">{{ 'SAFETY_NOTE' | t }}</span>
+  </header>
+
+  @if (!workspace.current()) {
+    <section class="panel">
+      <div class="form-row">
+        <div class="field grow">
+          <label class="t-label" for="analysis-select">{{ 'SELECT_ANALYSIS' | t }}</label>
+          <select
+            id="analysis-select"
+            class="select-field"
+            name="analysis"
+            [(ngModel)]="selectedAnalysisId"
+          >
+            <option [ngValue]="null">—</option>
+            @for (item of workspace.analyses(); track item.id) {
+              <option [ngValue]="item.id">#{{ item.id }} · {{ item.target }}</option>
+            }
+          </select>
+        </div>
+        <button
+          type="button"
+          class="btn-primary"
+          [disabled]="selectedAnalysisId === null"
+          (click)="loadSelected()"
+        >
+          {{ 'LOAD' | t }}
+        </button>
+        <button type="button" class="btn-ghost" (click)="workspace.refreshHistory()">
+          {{ 'REFRESH' | t }}
+        </button>
+      </div>
+      @if (!workspace.historyLoading() && workspace.analyses().length === 0) {
+        <div class="empty-state t-label">{{ 'NO_ANALYSIS_SELECTED' | t }}</div>
+      }
+    </section>
+  } @else {
+    <section class="analysis-bar">
+      <span class="t-data">#{{ workspace.current()?.id }} · {{ workspace.current()?.target }}</span>
+      <app-status-badge [status]="workspace.current()?.status ?? 'PENDING'" />
+    </section>
+
+    <section class="panel config-panel">
+      <span class="t-label">{{ 'STRATEGY' | t }}</span>
+      <div class="filter-chips strategy-chips">
+        @for (item of strategies; track item.id) {
+          <button
+            type="button"
+            class="chip"
+            [class.active]="strategy === item.id"
+            (click)="strategy = item.id"
+          >
+            {{ item.key | t }}
+          </button>
+        }
+      </div>
+
+      <div class="form-row credentials">
+        <div class="field">
+          <label class="t-label" for="token-input">{{ 'AUTH_TOKEN_OPT' | t }}</label>
+          <input
+            id="token-input"
+            class="input-field"
+            type="password"
+            name="token"
+            autocomplete="off"
+            [(ngModel)]="token"
+          />
+        </div>
+        <div class="field">
+          <label class="t-label" for="cookie-input">{{ 'AUTH_COOKIE_OPT' | t }}</label>
+          <input
+            id="cookie-input"
+            class="input-field"
+            type="text"
+            name="cookie"
+            autocomplete="off"
+            [(ngModel)]="cookie"
+          />
+        </div>
+      </div>
+
+      <label class="mutation-toggle t-label">
+        <input type="checkbox" name="mutations" [(ngModel)]="allowMutations" />
+        {{ 'ALLOW_MUTATIONS' | t }}
+      </label>
+      <span class="t-label mutation-hint">{{ 'ALLOW_MUTATIONS_HINT' | t }}</span>
+
+      <div class="endpoint-picker">
+        <div class="picker-head">
+          <span class="t-label">{{ 'SELECT_ENDPOINTS' | t }} ({{ selectedCount() }}/{{ endpoints().length }})</span>
+          <div class="picker-actions">
+            <button type="button" class="btn-ghost small" (click)="selectAll()">
+              {{ 'SELECT_ALL' | t }}
+            </button>
+            <button type="button" class="btn-ghost small" (click)="clearAll()">
+              {{ 'CLEAR' | t }}
+            </button>
+          </div>
+        </div>
+        <div class="picker-list">
+          @for (endpoint of endpoints(); track endpoint.id) {
+            <label class="picker-item">
+              <input
+                type="checkbox"
+                [checked]="isSelected(endpoint.id)"
+                (change)="toggle(endpoint)"
+              />
+              <span class="tag" [class]="'tag-protocol-' + endpoint.protocol">
+                {{ endpoint.protocol }}
+              </span>
+              <span class="t-data method">{{ endpoint.method || '—' }}</span>
+              <span class="t-data path">{{ endpoint.path }}</span>
+            </label>
+          } @empty {
+            <div class="empty-state t-label">{{ 'NO_ENDPOINTS' | t }}</div>
+          }
+        </div>
+      </div>
+
+      @if (error()) {
+        <div class="t-label text-accent error-line">[{{ 'ERROR' | t }}: {{ error() }}]</div>
+      }
+
+      <button
+        type="button"
+        class="btn-primary run-btn"
+        [disabled]="running() || selectedCount() === 0"
+        (click)="run()"
+      >
+        {{ running() ? ('LOADING' | t) : ('RUN_FUZZ' | t) }}
+      </button>
+    </section>
+
+    @if (result(); as response) {
+      <section class="results">
+        <div class="metric-grid">
+          <app-metric-card [labelKey]="'REQUESTS_SENT'" [value]="response.requests_sent" />
+          <app-metric-card
+            [labelKey]="'FINDINGS_FOUND'"
+            [value]="findings().length"
+            [tone]="findings().length > 0 ? 'warning' : ''"
+          />
+          <app-metric-card [labelKey]="'STRATEGY'" [value]="response.strategy" />
+        </div>
+
+        @if (response.aborted) {
+          <div class="t-label text-accent abort-banner">
+            [{{ 'ABORTED' | t }}: {{ response.abort_reason }}]
+          </div>
+        }
+
+        @if (findings().length > 0) {
+          <h2 class="t-label section-title">{{ 'FINDINGS' | t }}</h2>
+          @for (finding of findings(); track finding.id) {
+            <div class="finding-row" [class]="'sev-border-' + finding.severity">
+              <div class="finding-head">
+                <app-severity-tag [severity]="finding.severity" />
+                <span class="t-data finding-check">{{ finding.check }}</span>
+                <span class="t-label">{{ finding.confidence || '—' }}</span>
+              </div>
+              <p class="finding-title">{{ finding.title }}</p>
+              <p class="t-data text-secondary target-url">{{ finding.target_url || '—' }}</p>
+              <details class="evidence">
+                <summary class="t-label">{{ 'EVIDENCE' | t }}</summary>
+                <pre class="evidence-block">{{ evidenceText(finding.evidence) }}</pre>
+              </details>
+            </div>
+          }
+        } @else {
+          <div class="empty-state t-label no-findings">{{ 'NO_FINDINGS' | t }}</div>
+        }
+      </section>
+    }
+  }
+</div>

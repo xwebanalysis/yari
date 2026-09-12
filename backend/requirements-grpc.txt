@@ -1,0 +1,10 @@
+# Optional gRPC server reflection support.
+#
+# The base image/requirements intentionally avoid grpcio (large C extension).
+# Install this file to enable full `grpc_reflection` discovery; without it Yari
+# falls back to passive detection (HTTP/2 preface + content-type probes).
+#
+#   .venv/bin/pip install -r requirements-grpc.txt
+-r requirements.txt
+grpcio==1.83.1
+grpcio-reflection==1.83.1
