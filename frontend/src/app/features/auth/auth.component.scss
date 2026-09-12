@@ -1,0 +1,39 @@
+.grow {
+  flex: 2 1 320px;
+}
+
+.passive-note {
+  max-width: 420px;
+  text-align: right;
+}
+
+.analysis-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.error-line {
+  margin-top: var(--space-md);
+}
+
+.results {
+  margin-top: var(--space-xl);
+}
+
+.table-panel {
+  padding: var(--space-sm) var(--space-md);
+}
+
+.check-cell {
+  word-break: break-word;
+}
+
+.finding-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}

@@ -1,0 +1,34 @@
+<nav class="topbar">
+  <div class="brand">
+    <h1 class="t-heading">YARI</h1>
+    <span class="t-label">{{ 'XWA_MODULE' | t }}</span>
+  </div>
+
+  <nav class="nav-links" aria-label="Main navigation">
+    <a class="nav-link" routerLink="/discover" routerLinkActive="active">{{ 'NAV_DISCOVER' | t }}</a>
+    <a class="nav-link" routerLink="/endpoints" routerLinkActive="active">{{ 'NAV_ENDPOINTS' | t }}</a>
+    <a class="nav-link" routerLink="/fuzzing" routerLinkActive="active">{{ 'NAV_FUZZING' | t }}</a>
+    <a class="nav-link" routerLink="/auth" routerLinkActive="active">{{ 'NAV_AUTH' | t }}</a>
+    <a class="nav-link" routerLink="/history" routerLinkActive="active">{{ 'NAV_HISTORY' | t }}</a>
+  </nav>
+
+  <div class="topbar-actions">
+    <span
+      class="t-label status-label"
+      [class.text-success]="backendOnline()"
+      [class.text-accent]="!backendOnline()"
+    >
+      [{{ (backendOnline() ? 'BACKEND_ONLINE' : 'BACKEND_OFFLINE') | t }}]
+    </span>
+    <button type="button" class="lang-toggle-btn" (click)="toggleLang()" aria-label="Switch language">
+      {{ i18n.lang() === 'en' ? 'ES' : 'EN' }}
+    </button>
+    <button type="button" class="theme-toggle-btn" (click)="toggleTheme()" aria-label="Switch theme">
+      {{ theme.nextThemeLabel() }}
+    </button>
+  </div>
+</nav>
+
+<main class="container dot-grid-subtle">
+  <router-outlet />
+</main>

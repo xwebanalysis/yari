@@ -1,0 +1,78 @@
+<div class="route-container">
+  <header class="section-header">
+    <div>
+      <h1 class="t-heading">{{ 'DISCOVER_TITLE' | t }}</h1>
+      <span class="t-label">{{ 'DISCOVER_SUBTITLE' | t }}</span>
+    </div>
+    <span class="t-label">{{ 'DISCOVER_HINT' | t }}</span>
+  </header>
+
+  <section class="panel">
+    <form class="form-row" (ngSubmit)="run()">
+      <div class="field grow">
+        <label class="t-label" for="target-input">{{ 'TARGET' | t }}</label>
+        <input
+          id="target-input"
+          name="target"
+          class="input-field"
+          type="text"
+          [(ngModel)]="target"
+          [placeholder]="'TARGET_PLACEHOLDER' | t"
+          autocomplete="off"
+        />
+      </div>
+
+      <div class="field narrow">
+        <label class="t-label" for="bundles-select">{{ 'MAX_BUNDLES' | t }}</label>
+        <select id="bundles-select" name="bundles" class="select-field" [(ngModel)]="maxBundles">
+          <option [ngValue]="0">0</option>
+          <option [ngValue]="5">5</option>
+          <option [ngValue]="10">10</option>
+          <option [ngValue]="20">20</option>
+        </select>
+      </div>
+
+      <label class="live-toggle t-label">
+        <input type="checkbox" name="live" [(ngModel)]="live" />
+        {{ 'LIVE_STREAM' | t }}
+      </label>
+
+      @if (loading()) {
+        <button type="button" class="btn-danger" (click)="stop()">{{ 'STOP' | t }}</button>
+      } @else {
+        <button type="submit" class="btn-primary" [disabled]="!target.trim()">
+          {{ 'RUN_DISCOVERY' | t }}
+        </button>
+      }
+    </form>
+
+    @if (error()) {
+      <div class="t-label text-accent error-line">[{{ 'ERROR' | t }}: {{ error() }}]</div>
+    }
+  </section>
+
+  <section class="live-section">
+    <app-terminal [titleKey]="'DISCOVERY_LOG'" [lines]="lines()" />
+  </section>
+
+  @if (completed()) {
+    <section class="results-section">
+      <div class="section-title-row">
+        <h2 class="t-label">{{ 'ANALYSIS' | t }} #{{ analysisId() }}</h2>
+        <div class="result-links">
+          <a class="btn-ghost link-btn" routerLink="/endpoints">{{ 'VIEW_ENDPOINTS' | t }}</a>
+          <a class="btn-ghost link-btn" routerLink="/fuzzing">{{ 'VIEW_FUZZING' | t }}</a>
+        </div>
+      </div>
+
+      <div class="metric-grid">
+        <app-metric-card [labelKey]="'ENDPOINTS'" [value]="endpointCount()" />
+        <app-metric-card [labelKey]="'FINDINGS'" [value]="findingCount()" tone="warning" />
+        <app-metric-card [labelKey]="'REQUESTS'" [value]="probes()" />
+        @if (grpcMode()) {
+          <app-metric-card [labelKey]="'GRPC_MODE'" [value]="grpcMode() ?? '-'" />
+        }
+      </div>
+    </section>
+  }
+</div>

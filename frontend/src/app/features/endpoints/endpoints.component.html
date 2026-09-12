@@ -1,0 +1,150 @@
+<div class="route-container">
+  <header class="section-header">
+    <div>
+      <h1 class="t-heading">{{ 'ENDPOINTS_TITLE' | t }}</h1>
+      <span class="t-label">{{ 'ENDPOINTS_SUBTITLE' | t }}</span>
+    </div>
+  </header>
+
+  @if (!workspace.current()) {
+    <section class="panel">
+      <div class="form-row">
+        <div class="field grow">
+          <label class="t-label" for="analysis-select">{{ 'SELECT_ANALYSIS' | t }}</label>
+          <select
+            id="analysis-select"
+            class="select-field"
+            name="analysis"
+            [(ngModel)]="selectedAnalysisId"
+          >
+            <option [ngValue]="null">—</option>
+            @for (item of workspace.analyses(); track item.id) {
+              <option [ngValue]="item.id">#{{ item.id }} · {{ item.target }}</option>
+            }
+          </select>
+        </div>
+        <button
+          type="button"
+          class="btn-primary"
+          [disabled]="selectedAnalysisId === null"
+          (click)="loadSelected()"
+        >
+          {{ 'LOAD' | t }}
+        </button>
+        <button type="button" class="btn-ghost" (click)="workspace.refreshHistory()">
+          {{ 'REFRESH' | t }}
+        </button>
+      </div>
+      @if (workspace.historyLoading()) {
+        <div class="t-label waiting">{{ 'LOADING' | t }}</div>
+      }
+      @if (!workspace.historyLoading() && workspace.analyses().length === 0) {
+        <div class="empty-state t-label">{{ 'NO_ANALYSIS_SELECTED' | t }}</div>
+      }
+    </section>
+  } @else {
+    <section class="hero-row">
+      <div class="hero-block">
+        <span class="t-label">{{ 'ENDPOINTS' | t }}</span>
+        <span class="hero-number">{{ endpoints().length }}</span>
+        <span class="t-label">#{{ workspace.current()?.id }} · {{ workspace.current()?.target }}</span>
+      </div>
+      <app-status-badge [status]="workspace.current()?.status ?? 'PENDING'" />
+    </section>
+
+    <section class="metric-grid metric-section">
+      <app-metric-card [labelKey]="'PROTOCOL'" [value]="'REST ' + countRest()" />
+      <app-metric-card [labelKey]="'PROTOCOL'" [value]="'GRAPHQL ' + countGraphql()" />
+      <app-metric-card [labelKey]="'PROTOCOL'" [value]="'GRPC ' + countGrpc()" />
+      <app-metric-card
+        [labelKey]="'FINDINGS'"
+        [value]="findingCount()"
+        [tone]="findingCount() > 0 ? 'warning' : ''"
+      />
+    </section>
+
+    <section class="filters">
+      <div class="filter-chips">
+        @for (protocol of protocols; track protocol) {
+          <button
+            type="button"
+            class="chip"
+            [class.active]="protocolFilter() === protocol"
+            (click)="protocolFilter.set(protocol)"
+          >
+            {{ protocol }}
+          </button>
+        }
+      </div>
+
+      <div class="filter-row">
+        <select
+          class="select-field source-select"
+          name="source"
+          [ngModel]="sourceFilter()"
+          (ngModelChange)="sourceFilter.set($event)"
+        >
+          <option value="all">{{ 'ALL' | t }}</option>
+          @for (source of sources(); track source) {
+            <option [value]="source">{{ source }}</option>
+          }
+        </select>
+        <input
+          class="input-field search-field"
+          type="text"
+          name="search"
+          [ngModel]="search()"
+          (ngModelChange)="search.set($event)"
+          [placeholder]="'SEARCH_PLACEHOLDER' | t"
+        />
+      </div>
+    </section>
+
+    <section class="panel table-panel">
+      @if (filtered().length > 0) {
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="t-label">{{ 'PROTOCOL' | t }}</th>
+                <th class="t-label">{{ 'METHOD' | t }}</th>
+                <th class="t-label">{{ 'PATH' | t }}</th>
+                <th class="t-label">{{ 'HOST' | t }}</th>
+                <th class="t-label">{{ 'AUTH_REQUIRED' | t }}</th>
+                <th class="t-label">{{ 'SOURCE' | t }}</th>
+                <th class="t-label">{{ 'PARAMS' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (endpoint of filtered(); track endpoint.id) {
+                <tr>
+                  <td>
+                    <span class="tag" [class]="'tag-protocol-' + endpoint.protocol">
+                      {{ endpoint.protocol }}
+                    </span>
+                  </td>
+                  <td class="t-data">{{ endpoint.method || '—' }}</td>
+                  <td class="t-data path-cell">{{ endpoint.path }}</td>
+                  <td class="t-data text-secondary">{{ endpoint.host || '—' }}</td>
+                  <td class="t-data">
+                    @if (endpoint.auth_required === true) {
+                      <span class="text-warning">{{ 'YES' | t }}</span>
+                    } @else if (endpoint.auth_required === false) {
+                      {{ 'NO' | t }}
+                    } @else {
+                      ?
+                    }
+                  </td>
+                  <td class="t-data text-secondary">{{ endpoint.source }}</td>
+                  <td class="t-data">{{ paramCount(endpoint) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="empty-state t-label">{{ 'NO_ENDPOINTS' | t }}</div>
+      }
+    </section>
+  }
+</div>

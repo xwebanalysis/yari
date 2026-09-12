@@ -1,0 +1,182 @@
+<div class="route-container">
+  <header class="section-header">
+    <div>
+      <h1 class="t-heading">{{ 'HISTORY_TITLE' | t }}</h1>
+      <span class="t-label">{{ 'HISTORY_SUBTITLE' | t }}</span>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="btn-ghost" (click)="workspace.refreshHistory()">
+        {{ 'REFRESH' | t }}
+      </button>
+      <button
+        type="button"
+        class="btn-danger"
+        [disabled]="workspace.analyses().length === 0"
+        (click)="removeAll()"
+      >
+        {{ 'DELETE_ALL' | t }}
+      </button>
+    </div>
+  </header>
+
+  @if (workspace.error()) {
+    <div class="t-label text-accent error-line">[{{ 'ERROR' | t }}: {{ workspace.error() }}]</div>
+  }
+
+  <section class="panel table-panel">
+    @if (workspace.historyLoading()) {
+      <div class="t-label waiting">{{ 'LOADING' | t }}</div>
+    } @else if (workspace.analyses().length > 0) {
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="t-label">#</th>
+              <th class="t-label">{{ 'TARGET' | t }}</th>
+              <th class="t-label">{{ 'STATUS' | t }}</th>
+              <th class="t-label">{{ 'CREATED' | t }}</th>
+              <th class="t-label">{{ 'ENDPOINTS' | t }}</th>
+              <th class="t-label">{{ 'FINDINGS' | t }}</th>
+              <th class="t-label">{{ 'FUZZ_RUNS' | t }}</th>
+              <th class="t-label">{{ 'AUTH_TESTS' | t }}</th>
+              <th class="t-label">{{ 'RESULTS' | t }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of workspace.analyses(); track item.id) {
+              <tr>
+                <td class="t-data">{{ item.id }}</td>
+                <td class="t-data target-cell">{{ item.target }}</td>
+                <td><app-status-badge [status]="item.status" /></td>
+                <td class="t-data text-secondary">{{ formatDate(item.created_at) }}</td>
+                <td class="t-data">{{ item.endpoint_count }}</td>
+                <td class="t-data" [class.text-warning]="item.finding_count > 0">
+                  {{ item.finding_count }}
+                </td>
+                <td class="t-data">{{ item.fuzz_run_count }}</td>
+                <td class="t-data">{{ item.auth_test_count }}</td>
+                <td class="row-actions">
+                  <button type="button" class="btn-ghost small" (click)="open(item.id)">
+                    {{ 'OPEN' | t }}
+                  </button>
+                  <button type="button" class="btn-ghost small" (click)="exportJson(item.id)">
+                    JSON
+                  </button>
+                  <button type="button" class="btn-ghost small" (click)="exportCsv(item.id)">
+                    CSV
+                  </button>
+                  <button type="button" class="btn-ghost small" (click)="remove(item.id)">
+                    {{ 'DELETE' | t }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="empty-state t-label">{{ 'NO_HISTORY' | t }}</div>
+    }
+  </section>
+
+  @if (workspace.current(); as analysis) {
+    <section class="detail">
+      <div class="detail-head">
+        <div>
+          <h2 class="t-heading">{{ 'ANALYSIS_DETAIL' | t }} #{{ analysis.id }}</h2>
+          <span class="t-label">{{ analysis.target }}</span>
+        </div>
+        <app-export-actions
+          (exportJson)="exportJson(analysis.id)"
+          (exportCsv)="exportCsv(analysis.id)"
+          (exportPdf)="exportPdf(analysis)"
+        />
+      </div>
+
+      <div class="metric-grid">
+        <app-metric-card [labelKey]="'ENDPOINTS'" [value]="analysis.endpoints.length" />
+        <app-metric-card
+          [labelKey]="'FINDINGS'"
+          [value]="analysis.findings.length"
+          [tone]="analysis.findings.length > 0 ? 'warning' : ''"
+        />
+        <app-metric-card [labelKey]="'FUZZ_RUNS'" [value]="analysis.fuzz_runs.length" />
+        <app-metric-card [labelKey]="'AUTH_TESTS'" [value]="analysis.auth_tests.length" />
+      </div>
+
+      <div class="kv-row">
+        <span class="t-label">{{ 'STATUS' | t }}</span>
+        <app-status-badge [status]="analysis.status" />
+      </div>
+      <div class="kv-row">
+        <span class="t-label">{{ 'STARTED' | t }}</span>
+        <span class="t-data">{{ formatDate(analysis.started_at) }}</span>
+      </div>
+      <div class="kv-row">
+        <span class="t-label">{{ 'FINISHED' | t }}</span>
+        <span class="t-data">{{ formatDate(analysis.finished_at) }}</span>
+      </div>
+      @if (analysis.error_message) {
+        <div class="kv-row">
+          <span class="t-label">{{ 'ERROR_MESSAGE' | t }}</span>
+          <span class="t-data text-accent">{{ analysis.error_message }}</span>
+        </div>
+      }
+
+      <h3 class="t-label section-title">{{ 'FINDINGS' | t }}</h3>
+      <app-finding-list [findings]="analysis.findings" />
+
+      @if (analysis.fuzz_runs.length > 0) {
+        <h3 class="t-label section-title">{{ 'FUZZ_RUNS' | t }}</h3>
+        <section class="panel table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th class="t-label">{{ 'ENDPOINT' | t }}</th>
+                <th class="t-label">{{ 'STRATEGY' | t }}</th>
+                <th class="t-label">{{ 'REQUESTS_SHORT' | t }}</th>
+                <th class="t-label">{{ 'FINDINGS' | t }}</th>
+                <th class="t-label">{{ 'STATUS' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (run of analysis.fuzz_runs; track run.id) {
+                <tr>
+                  <td class="t-data">#{{ run.endpoint_id ?? '—' }}</td>
+                  <td class="t-data">{{ run.strategy }}</td>
+                  <td class="t-data">{{ run.requests_sent }}</td>
+                  <td class="t-data">{{ run.findings_count }}</td>
+                  <td><app-status-badge [status]="run.status" /></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+
+      @if (analysis.auth_tests.length > 0) {
+        <h3 class="t-label section-title">{{ 'AUTH_TESTS' | t }}</h3>
+        <section class="panel table-panel">
+          <table>
+            <thead>
+              <tr>
+                <th class="t-label">{{ 'MECHANISM' | t }}</th>
+                <th class="t-label">{{ 'CHECK' | t }}</th>
+                <th class="t-label">{{ 'RESULT' | t }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (test of analysis.auth_tests; track test.id) {
+                <tr>
+                  <td class="t-data">{{ test.mechanism }}</td>
+                  <td class="t-data">{{ test.check }}</td>
+                  <td><app-severity-tag [severity]="test.result" /></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+    </section>
+  }
+</div>

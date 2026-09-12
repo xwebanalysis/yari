@@ -1,0 +1,146 @@
+<div class="route-container">
+  <header class="section-header">
+    <div>
+      <h1 class="t-heading">{{ 'AUTH_TITLE' | t }}</h1>
+      <span class="t-label">{{ 'AUTH_SUBTITLE' | t }}</span>
+    </div>
+    <span class="t-label passive-note">{{ 'AUTH_PASSIVE_NOTE' | t }}</span>
+  </header>
+
+  @if (!workspace.current()) {
+    <section class="panel">
+      <div class="form-row">
+        <div class="field grow">
+          <label class="t-label" for="analysis-select">{{ 'SELECT_ANALYSIS' | t }}</label>
+          <select
+            id="analysis-select"
+            class="select-field"
+            name="analysis"
+            [(ngModel)]="selectedAnalysisId"
+          >
+            <option [ngValue]="null">—</option>
+            @for (item of workspace.analyses(); track item.id) {
+              <option [ngValue]="item.id">#{{ item.id }} · {{ item.target }}</option>
+            }
+          </select>
+        </div>
+        <button
+          type="button"
+          class="btn-primary"
+          [disabled]="selectedAnalysisId === null"
+          (click)="loadSelected()"
+        >
+          {{ 'LOAD' | t }}
+        </button>
+        <button type="button" class="btn-ghost" (click)="workspace.refreshHistory()">
+          {{ 'REFRESH' | t }}
+        </button>
+      </div>
+      @if (!workspace.historyLoading() && workspace.analyses().length === 0) {
+        <div class="empty-state t-label">{{ 'NO_ANALYSIS_SELECTED' | t }}</div>
+      }
+    </section>
+  } @else {
+    <section class="analysis-bar">
+      <span class="t-data">#{{ workspace.current()?.id }} · {{ workspace.current()?.target }}</span>
+      <app-status-badge [status]="workspace.current()?.status ?? 'PENDING'" />
+    </section>
+
+    <section class="panel">
+      <div class="form-row">
+        <div class="field">
+          <label class="t-label" for="token-input">{{ 'AUTH_TOKEN_OPT' | t }}</label>
+          <input
+            id="token-input"
+            class="input-field"
+            type="password"
+            name="token"
+            autocomplete="off"
+            [(ngModel)]="token"
+          />
+        </div>
+        <div class="field">
+          <label class="t-label" for="cookie-input">{{ 'AUTH_COOKIE_OPT' | t }}</label>
+          <input
+            id="cookie-input"
+            class="input-field"
+            type="text"
+            name="cookie"
+            autocomplete="off"
+            [(ngModel)]="cookie"
+          />
+        </div>
+        <button
+          type="button"
+          class="btn-primary"
+          [disabled]="running() || (!token.trim() && !cookie.trim())"
+          (click)="run()"
+        >
+          {{ running() ? ('LOADING' | t) : ('RUN_AUTH_TEST' | t) }}
+        </button>
+      </div>
+
+      @if (error()) {
+        <div class="t-label text-accent error-line">[{{ 'ERROR' | t }}: {{ error() }}]</div>
+      }
+    </section>
+
+    @if (response(); as result) {
+      <section class="results">
+        <div class="metric-grid">
+          <app-metric-card [labelKey]="'AUTH_TESTS'" [value]="tests().length" />
+          <app-metric-card
+            [labelKey]="'FINDINGS'"
+            [value]="problemCount()"
+            [tone]="problemCount() > 0 ? 'warning' : ''"
+          />
+          <app-metric-card [labelKey]="'REQUESTS'" [value]="result.requests_sent" />
+        </div>
+
+        <h2 class="t-label section-title">{{ 'RESULTS' | t }}</h2>
+        <section class="panel table-panel">
+          @if (tests().length > 0) {
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="t-label">{{ 'MECHANISM' | t }}</th>
+                    <th class="t-label">{{ 'CHECK' | t }}</th>
+                    <th class="t-label">{{ 'RESULT' | t }}</th>
+                    <th class="t-label">{{ 'DETAILS' | t }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (test of tests(); track test.id) {
+                    <tr>
+                      <td class="t-data">{{ test.mechanism }}</td>
+                      <td class="t-data check-cell">{{ test.check }}</td>
+                      <td><app-severity-tag [severity]="test.result" /></td>
+                      <td class="t-data text-secondary">{{ detailLabel(test.details) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <div class="empty-state t-label">{{ 'NO_TESTS' | t }}</div>
+          }
+        </section>
+
+        @if (findings().length > 0) {
+          <h2 class="t-label section-title">{{ 'FINDINGS' | t }}</h2>
+          @for (finding of findings(); track finding.id) {
+            <div class="finding-row" [class]="'sev-border-' + finding.severity">
+              <div class="finding-head">
+                <app-severity-tag [severity]="finding.severity" />
+                <span class="t-data">{{ finding.check }}</span>
+              </div>
+              <p class="finding-title">{{ finding.title }}</p>
+              <p class="t-data text-secondary">{{ finding.description }}</p>
+            </div>
+          }
+        }
+      </section>
+    }
+  }
+</div>
