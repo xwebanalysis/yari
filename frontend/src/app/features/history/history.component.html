@@ -23,6 +23,26 @@
     <div class="t-label text-accent error-line">[{{ 'ERROR' | t }}: {{ workspace.error() }}]</div>
   }
 
+  @if (!workspace.historyLoading() && workspace.analyses().length > 0) {
+    <section class="panel charts-panel">
+      <div class="charts-grid">
+        <div class="chart-block">
+          <h2 class="t-label">{{ 'ANALYSES_PER_DAY' | t }}</h2>
+          <app-xwa-chart kind="line" [data]="analysesPerDay()" title="Analyses per day" />
+        </div>
+        <div class="chart-block">
+          <h2 class="t-label">{{ 'ANALYSIS_STATUS' | t }}</h2>
+          <app-xwa-chart
+            kind="donut"
+            [data]="statusChart()"
+            unit="ANALYSES"
+            title="Analysis status distribution"
+          />
+        </div>
+      </div>
+    </section>
+  }
+
   <section class="panel table-panel">
     @if (workspace.historyLoading()) {
       <div class="t-label waiting">{{ 'LOADING' | t }}</div>
@@ -124,6 +144,29 @@
       }
 
       <h3 class="t-label section-title">{{ 'FINDINGS' | t }}</h3>
+      @if (analysis.findings.length > 0) {
+        <section class="panel charts-panel detail-charts">
+          <div class="charts-grid">
+            <div class="chart-block">
+              <h2 class="t-label">{{ 'FINDINGS_BY_SEVERITY' | t }}</h2>
+              <app-xwa-chart
+                kind="donut"
+                [data]="severityChart()"
+                unit="FINDINGS"
+                title="Findings by severity"
+              />
+            </div>
+            <div class="chart-block">
+              <h2 class="t-label">{{ 'FINDINGS_BY_CATEGORY' | t }}</h2>
+              <app-xwa-chart
+                kind="h-bars"
+                [data]="categoryChart()"
+                title="Findings by category"
+              />
+            </div>
+          </div>
+        </section>
+      }
       <app-finding-list [findings]="analysis.findings" />
 
       @if (analysis.fuzz_runs.length > 0) {

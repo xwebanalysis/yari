@@ -23,6 +23,19 @@
   margin-top: var(--space-lg);
 }
 
+.charts-panel {
+  margin-top: var(--space-lg);
+  max-height: none;
+  overflow: visible;
+}
+
+.chart-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+
 .filters {
   display: flex;
   align-items: center;

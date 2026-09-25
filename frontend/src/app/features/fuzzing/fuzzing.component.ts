@@ -33,6 +33,7 @@ export class FuzzingComponent implements OnInit {
     { id: 'safe', key: 'STRATEGY_SAFE' },
     { id: 'reflect', key: 'STRATEGY_REFLECT' },
     { id: 'error_based', key: 'STRATEGY_ERROR_BASED' },
+    { id: 'schema', key: 'STRATEGY_SCHEMA' },
     { id: 'authz_matrix', key: 'STRATEGY_AUTHZ_MATRIX' },
     { id: 'rate_limit', key: 'STRATEGY_RATE_LIMIT' },
   ];

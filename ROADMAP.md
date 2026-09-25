@@ -23,7 +23,7 @@ This file is formatted to be synced automatically with GitHub Issues using the `
 - [x] Implement parameter fuzzing with common injection payloads (benign set: `'`, `"`, `%00`, `{}`, `-1`, canaries)
 - [x] Add fuzz target selection based on parameter types (endpoint picker + `endpoint_ids` + safe default selection)
 - [x] Detect error-based information disclosure during fuzzing (status/length deltas vs baseline)
-- [ ] Add OpenAPI-schema-driven payload generation
+- [x] Add OpenAPI-schema-driven payload generation (benign typed values: string canary, integer -1/0/1, boolean, enums, required vs optional — same 20-request budget, jitter and read-only rules)
 - [ ] Add authenticated crawling and request generation from JS runtime hooks
 
 ## Authentication Testing <!-- phase:auth-testing -->
@@ -50,6 +50,7 @@ This file is formatted to be synced automatically with GitHub Issues using the `
 ## Future <!-- phase:future -->
 
 - [ ] gRPC protobuf-driven method invocation and schema-aware checks
-- [ ] CI pipeline (pytest + vitest + build) for the repository
-- [ ] Import/export of the full SQLite database (xwa-sdk `SAMURAI_DB_EXPORT_V1` compatible)
+- [x] CI pipeline (pytest + vitest + build) for the repository
+- [x] Export of the full SQLite database (xwa-sdk `SAMURAI_DB_EXPORT_V1` compatible)
+- [ ] Import/restore of an exported database (pending — export only for now)
 - [ ] Detection of WAF/rate-limit fingerprints during discovery (kabuki overlap)

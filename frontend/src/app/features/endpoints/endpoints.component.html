@@ -63,6 +63,15 @@
       />
     </section>
 
+    @if (endpoints().length > 0) {
+      <section class="panel charts-panel">
+        <div class="chart-block">
+          <h2 class="t-label">{{ 'ENDPOINTS_BY_METHOD' | t }}</h2>
+          <app-xwa-chart kind="bars" [data]="methodsChart()" title="Endpoints per HTTP method" />
+        </div>
+      </section>
+    }
+
     <section class="filters">
       <div class="filter-chips">
         @for (protocol of protocols; track protocol) {
