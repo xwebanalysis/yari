@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
-from . import analyzer, auth_testing, database, fuzzing, models, schemas, security
+from . import analyzer, auth_testing, database, db_exporter, fuzzing, models, schemas, security
 from .events import EventStream
 
 SERVICE_VERSION = "0.1.0"
@@ -463,6 +463,49 @@ def delete_all_analyses(db: Session = Depends(database.get_db)):
     db.query(models.Analysis).delete()
     db.commit()
     return Response(status_code=204)
+
+
+# ── database export (xwa-sdk SAMURAI_DB_EXPORT_V1-compatible) ───────────────
+
+
+@app.get("/api/database/export/raw")
+def export_database_raw(db: Session = Depends(database.get_db)):
+    """Download the full database as a JSON document."""
+    payload = db_exporter.build_export_payload(db)
+    json_bytes = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+    return Response(
+        content=json_bytes,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": "attachment; filename=yari-database-export.json"
+        },
+    )
+
+
+@app.post("/api/database/export/encrypted")
+async def export_database_encrypted(payload: dict, db: Session = Depends(database.get_db)):
+    """Download the full database AES-256-GCM encrypted (PBKDF2-derived key).
+
+    The container keeps the shared ``SAMURAI_DB_EXPORT_V1`` header so exports
+    are interchangeable across the XWA toolchain. Import/restore is pending.
+    """
+    password = payload.get("password", "")
+
+    if not password or len(password) < 4:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 4 characters",
+        )
+
+    export_data = db_exporter.build_export_payload(db)
+    encrypted = db_exporter.encrypt_export_payload(export_data, password)
+    return Response(
+        content=encrypted,
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": "attachment; filename=yari-database-export.bin.enc"
+        },
+    )
 
 
 # ── fuzzing / auth testing ──────────────────────────────────────────────────

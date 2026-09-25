@@ -26,6 +26,8 @@ MAX_JS_ENDPOINTS = 100
 MAX_BUNDLE_BYTES = 1024 * 1024  # 1 MB per bundle
 MAX_BUNDLES = 10
 MAX_SPEC_BYTES = 2 * 1024 * 1024
+MAX_BODY_PARAMS = 10
+MAX_ENUM_VALUES = 8
 GRPC_PROBE_TIMEOUT = 3.0
 
 OPENAPI_PATHS = (
@@ -134,6 +136,8 @@ def _type_name(schema: Any) -> Optional[str]:
     if isinstance(schema, str):
         return schema
     if isinstance(schema, dict):
+        if schema.get("type") == "array" and isinstance(schema.get("items"), dict):
+            return f"array<{_type_name(schema['items']) or 'any'}>"
         if schema.get("type"):
             return str(schema["type"])
         if "$ref" in schema:
@@ -141,6 +145,62 @@ def _type_name(schema: Any) -> Optional[str]:
         if "items" in schema and isinstance(schema["items"], dict):
             return f"array<{_type_name(schema['items']) or 'any'}>"
     return None
+
+
+def _enum_values(schema: Any) -> Optional[list]:
+    """Extract a bounded list of scalar enum values from a schema (or None)."""
+    if not isinstance(schema, dict):
+        return None
+    enum = schema.get("enum")
+    if not isinstance(enum, list):
+        return None
+    values = [v for v in enum if isinstance(v, (str, int, float, bool))]
+    return values[:MAX_ENUM_VALUES] or None
+
+
+def _schema_param(name: str, location: str, schema: Any, required: bool = False) -> dict:
+    """Build a typed param dict from an OpenAPI parameter/property schema.
+
+    Type + enum metadata is what the fuzzer later uses to derive benign,
+    schema-typed payloads (string→canary, integer→-1/0/1, boolean, enums).
+    """
+    param: dict = {
+        "name": name,
+        "in": location,
+        "required": bool(required),
+        "type": _type_name(schema),
+    }
+    enum = _enum_values(schema)
+    if enum is not None:
+        param["enum"] = enum
+    return param
+
+
+def _extract_body_params(operation: dict) -> list[dict]:
+    """Extract typed ``body`` params from an OpenAPI 3 requestBody.
+
+    Only inline JSON-object schemas are expanded (properties with type/enum);
+    ``$ref``-only bodies are skipped so no lookup into ``components`` happens.
+    """
+    request_body = operation.get("requestBody")
+    if not isinstance(request_body, dict):
+        return []
+    content = request_body.get("content")
+    if not isinstance(content, dict):
+        return []
+    media = next((m for m in content if "json" in str(m).lower()), next(iter(content), None))
+    if media is None:
+        return []
+    schema = content[media].get("schema")
+    if not isinstance(schema, dict) or not isinstance(schema.get("properties"), dict):
+        return []
+    required = set(schema.get("required") or [])
+    params: list[dict] = []
+    for name, prop_schema in list(schema["properties"].items())[:MAX_BODY_PARAMS]:
+        if not isinstance(prop_schema, dict):
+            continue
+        params.append(_schema_param(str(name), "body", prop_schema, name in required))
+    return params
 
 
 def parse_openapi_spec(spec: dict, base_url: str) -> list[DiscoveredEndpoint]:
@@ -180,14 +240,18 @@ def parse_openapi_spec(spec: dict, base_url: str) -> list[DiscoveredEndpoint]:
             ):
                 if not isinstance(raw_param, dict) or "$ref" in raw_param:
                     continue
+                name = str(raw_param.get("name") or "")
+                if not name:
+                    continue
                 params.append(
-                    {
-                        "name": str(raw_param.get("name") or ""),
-                        "in": str(raw_param.get("in") or "query"),
-                        "required": bool(raw_param.get("required")),
-                        "type": _type_name(raw_param.get("schema") or raw_param.get("type")),
-                    }
+                    _schema_param(
+                        name,
+                        str(raw_param.get("in") or "query"),
+                        raw_param.get("schema") or raw_param.get("type"),
+                        raw_param.get("required"),
+                    )
                 )
+            params.extend(_extract_body_params(operation))
 
             security = operation.get("security", global_security)
             if "security" not in operation and global_security is None:

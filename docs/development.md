@@ -73,7 +73,7 @@ monospace so the UI remains usable.
 
 ## Test strategy
 
-- **Backend (42 tests)** — pytest with `httpx.MockTransport` for all network
+- **Backend (67 tests)** — pytest with `httpx.MockTransport` for all network
   code (`discovery`, `fuzzing`, `auth_testing`) and FastAPI `TestClient` for
   REST/WS integration. No test touches the real network.
 - **Frontend (11 tests)** — vitest/jsdom: app shell (health, i18n toggle),
@@ -91,12 +91,17 @@ monospace so the UI remains usable.
 - **gRPC** — reflection requires the optional extras (`YARI_GRPC=1`); the
   default install reports HTTP/2 presence passively. gRPC payload fuzzing is
   out of scope for v0.1.0.
-- **OpenAPI fuzzing** — Yari uses parameter names/locations but does not yet
-  generate schema-driven values; `requestBody` params are only contacted with
-  `allow_mutations: true`.
+- **OpenAPI fuzzing** — Yari derives benign typed payloads from OpenAPI
+  schemas (string canary, integer -1/0/1, boolean, enums, required vs
+  optional) and feeds them through the budgeted engine (`schema` strategy,
+  plus automatic typed payloads in `error_based`). `requestBody` params are
+  only contacted with `allow_mutations: true`.
 - **JS crawl** — static regex extraction; dynamic/runtime request generation
   and authenticated crawling are future work.
 - **Rate-limit strategy** — header-name heuristics (`x-ratelimit-*`,
   `ratelimit-limit`, `retry-after`); no throttling curve is computed yet.
 - **PDF export** is client-side (jsPDF/autoTable); the server-side export
   supports `json` and `csv` only, per the shared contract.
+- **Database import** — the full-database export
+  (`GET /api/database/export/raw`, `POST /api/database/export/encrypted`,
+  `SAMURAI_DB_EXPORT_V1` container) exists; import/restore is pending.

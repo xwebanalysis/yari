@@ -11,6 +11,10 @@ Design goals (user requirement: never get blocked or blacklisted):
 - Payloads are benign canaries/error triggers (``'``, ``"``, ``%00``, ``{}``,
   ``-1``); no exploitation payloads, no credential fuzzing, no injection of
   destructive values.
+- Endpoint params discovered from an OpenAPI spec carry ``type``/``enum``
+  metadata: schema-derived benign payloads (string canary, integer -1/0/1,
+  boolean, enum values) are fed through the same budgeted engine — every
+  safety guarantee above applies unchanged.
 """
 
 from __future__ import annotations
@@ -34,13 +38,122 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 ABORT_STATUS = {429, 503}
 ERROR_PAYLOADS = ("'", '"', "%00", "{}", "-1")
 CANARY_PREFIX = "xwa-canary-"
-STRATEGIES = ("safe", "reflect", "error_based", "authz_matrix", "rate_limit")
+STRATEGIES = ("safe", "reflect", "error_based", "authz_matrix", "rate_limit", "schema")
 RATE_LIMIT_HEADERS = (
     "x-ratelimit-limit",
     "x-rate-limit-limit",
     "ratelimit-limit",
     "retry-after",
 )
+
+# ── OpenAPI-schema-driven payload derivation ────────────────────────────
+#
+# When discovery parsed an OpenAPI spec, endpoint params carry ``type`` and
+# (optionally) ``enum`` metadata. The fuzzer derives *benign typed* values from
+# that schema instead of the generic error payloads:
+#   string   → unique benign canary
+#   integer  → -1 / 0 / 1
+#   boolean  → true / false
+#   enum     → the declared enum values
+#   array    → [] / [1]
+# Required params are always filled with a valid typed value in the baseline;
+# optional params stay out of the baseline and are only injected individually.
+
+INTEGER_PAYLOADS = (-1, 0, 1)
+BOOLEAN_PAYLOADS = (False, True)
+ARRAY_PAYLOADS = ([], [1])
+SCHEMA_STRING_TYPES = (
+    "string",
+    "uuid",
+    "date",
+    "date-time",
+    "email",
+    "uri",
+    "url",
+    "hostname",
+    "ipv4",
+    "ipv6",
+)
+BENIGN_STRING_VALUE = "xwa"
+
+MAX_SCHEMA_PAYLOADS = 3
+
+
+def _is_scalar(value: Any) -> bool:
+    return isinstance(value, (str, int, float, bool))
+
+
+def _param_type(param: dict) -> str:
+    return str(param.get("type") or "").lower()
+
+
+def param_has_schema(param: dict) -> bool:
+    """True when the param carries OpenAPI schema info (type or enum)."""
+    if not isinstance(param, dict):
+        return False
+    return bool(param.get("type")) or isinstance(param.get("enum"), list)
+
+
+def benign_values_for_param(param: dict, max_values: int = MAX_SCHEMA_PAYLOADS) -> list:
+    """Derive benign typed payloads for one endpoint param.
+
+    Schema-aware (OpenAPI): enum values first, then typed value sets; params
+    without schema info fall back to the generic ``ERROR_PAYLOADS`` so legacy
+    behaviour is preserved exactly.
+    """
+    enum = param.get("enum")
+    if isinstance(enum, list) and enum:
+        values = [v for v in enum if _is_scalar(v)]
+        if values:
+            return values[: max(1, max_values)]
+    type_name = _param_type(param)
+    if type_name in ("integer", "number"):
+        return list(INTEGER_PAYLOADS)[: max(1, max_values)]
+    if type_name == "boolean":
+        return list(BOOLEAN_PAYLOADS)[: max(1, max_values)]
+    if type_name.startswith("array"):
+        return list(ARRAY_PAYLOADS)[: max(1, max_values)]
+    if type_name in SCHEMA_STRING_TYPES:
+        return [f"{CANARY_PREFIX}{secrets.token_hex(4)}"]
+    return list(ERROR_PAYLOADS)
+
+
+def baseline_value_for_param(param: dict) -> Any:
+    """First benign *valid* typed value for a param (baseline requests).
+
+    Untyped legacy params keep ``"1"`` so historical behaviour is unchanged.
+    """
+    enum = param.get("enum")
+    if isinstance(enum, list) and enum and _is_scalar(enum[0]):
+        return enum[0]
+    type_name = _param_type(param)
+    if type_name == "integer":
+        return 1
+    if type_name == "number":
+        return 1.0
+    if type_name == "boolean":
+        return True
+    if type_name.startswith("array"):
+        return [1]
+    if type_name in SCHEMA_STRING_TYPES:
+        return BENIGN_STRING_VALUE
+    return "1"
+
+
+def _baseline_included(param: dict) -> bool:
+    """Should this param receive a baseline value?
+
+    Required params (and legacy untyped params without an explicit flag) are
+    filled; explicitly optional schema params are skipped so the baseline
+    stays as close to a well-formed client request as possible.
+    """
+    if param.get("in") == "path":
+        return True
+    if param.get("required") is True:
+        return True
+    if param.get("required") is None and not param_has_schema(param):
+        return True
+    return False
 
 
 class FuzzBudgetExceeded(Exception):
@@ -186,22 +299,35 @@ class SafeFuzzer:
         endpoint: dict,
         inject: Optional[dict] = None,
     ) -> tuple[str, dict]:
-        """Return (url, kwargs) for a request, optionally injecting one param."""
+        """Return (url, kwargs) for a request, optionally injecting one param.
+
+        Schema-aware: non-injected params get a benign typed baseline value
+        (``baseline_value_for_param``); explicitly optional schema params are
+        omitted from the baseline unless they are the injected param.
+        """
         params = [p for p in (endpoint.get("params") or []) if isinstance(p, dict)]
         path = _fill_path(endpoint.get("path") or "/", params, inject)
         url = endpoint_url(self.target, {**endpoint, "path": path})
 
         query: dict[str, str] = {}
-        body: dict[str, str] = {}
+        body: dict[str, Any] = {}
         for param in params:
             name = param.get("name")
             if not name:
                 continue
             location = param.get("in")
+            is_injected = bool(inject and inject.get("name") == name)
+            if not is_injected and not _baseline_included(param):
+                continue
+            value = (
+                inject.get("value")
+                if is_injected
+                else baseline_value_for_param(param)
+            )
             if location == "query":
-                query[str(name)] = str(inject.get("value")) if inject and inject.get("name") == name else "1"
+                query[str(name)] = str(value)
             elif location == "body" and self.allow_mutations:
-                body[str(name)] = str(inject.get("value")) if inject and inject.get("name") == name else "1"
+                body[str(name)] = value  # keep JSON types (int/bool/list) intact
 
         kwargs: dict[str, Any] = {}
         if query:
@@ -260,10 +386,13 @@ class SafeFuzzer:
         baseline_sig = (baseline.status_code, len(baseline.content or b""))
         recorded = 0
 
-        for payload in ERROR_PAYLOADS:
-            if recorded >= 3 or self.aborted:
-                break
-            for param in self._injectable(endpoint)[:2]:
+        for param in self._injectable(endpoint)[:2]:
+            # Schema-aware params (OpenAPI) get benign typed payloads; legacy
+            # params keep the generic benign error triggers.
+            payloads = benign_values_for_param(param)
+            for payload in payloads:
+                if recorded >= 3 or self.aborted:
+                    break
                 url, kwargs = self._build(endpoint, {"name": param["name"], "value": payload})
                 response = await self._send(method, url, **kwargs)
                 if response is None:
@@ -288,6 +417,67 @@ class SafeFuzzer:
                                 "poc_payload": payload,
                                 "param": str(param["name"]),
                                 "location": param.get("in"),
+                                "baseline": {"status_code": baseline_sig[0], "length": baseline_sig[1]},
+                                "observed": {"status_code": signature[0], "length": signature[1]},
+                            },
+                            confidence="medium",
+                        )
+                    )
+                if self.aborted:
+                    break
+
+    async def _strategy_schema(self, endpoint: dict, outcome: FuzzOutcome) -> None:
+        """OpenAPI-schema-driven pass: benign typed payloads only.
+
+        Runs the same baseline/anomaly comparison as ``error_based`` but only
+        over params that carry schema info (``type``/``enum`` from an OpenAPI
+        spec) and only with values derived from that schema. Inherits every
+        safety guarantee (budget, jitter, 429/503 abort, read-only methods).
+        """
+        method = endpoint.get("method") or "GET"
+        schema_params = [p for p in self._injectable(endpoint) if param_has_schema(p)]
+        if not schema_params:
+            outcome.skipped_reason = "no OpenAPI schema info (type/enum) on endpoint params"
+            return
+
+        baseline_url, baseline_kwargs = self._build(endpoint)
+        baseline = await self._send(method, baseline_url, **baseline_kwargs)
+        if baseline is None:
+            return
+        baseline_sig = (baseline.status_code, len(baseline.content or b""))
+        recorded = 0
+
+        for param in schema_params[:2]:
+            for payload in benign_values_for_param(param):
+                if recorded >= 3 or self.aborted:
+                    break
+                url, kwargs = self._build(endpoint, {"name": param["name"], "value": payload})
+                response = await self._send(method, url, **kwargs)
+                if response is None:
+                    continue
+                signature = (response.status_code, len(response.content or b""))
+                if signature != baseline_sig:
+                    recorded += 1
+                    outcome.findings.append(
+                        FuzzFinding(
+                            severity="low" if response.status_code >= 500 else "info",
+                            category="disclosure",
+                            check="schema_driven_anomaly",
+                            title="Schema-typed payload changes the response signature",
+                            description=(
+                                f"Parameter '{param['name']}' (type "
+                                f"{param.get('type') or 'enum'}) with benign typed value "
+                                f"{payload!r} produced HTTP {signature[0]} / {signature[1]} "
+                                f"bytes, while the schema-valid baseline was HTTP "
+                                f"{baseline_sig[0]} / {baseline_sig[1]} bytes. Check whether "
+                                "schema-valid values trigger error disclosure."
+                            ),
+                            target_url=url,
+                            evidence={
+                                "poc_payload": payload,
+                                "param": str(param["name"]),
+                                "location": param.get("in"),
+                                "param_type": param.get("type"),
                                 "baseline": {"status_code": baseline_sig[0], "length": baseline_sig[1]},
                                 "observed": {"status_code": signature[0], "length": signature[1]},
                             },
@@ -415,6 +605,7 @@ class SafeFuzzer:
             "error_based": ["error_based"],
             "authz_matrix": ["authz_matrix"],
             "rate_limit": ["rate_limit"],
+            "schema": ["schema"],
         }[strategy]
 
         start = self.sent
@@ -428,6 +619,8 @@ class SafeFuzzer:
                     await self._strategy_reflect(endpoint, outcome)
                 elif step == "error_based":
                     await self._strategy_error_based(endpoint, outcome)
+                elif step == "schema":
+                    await self._strategy_schema(endpoint, outcome)
                 elif step == "authz_matrix":
                     await self._strategy_authz_matrix(endpoint, outcome)
         except FuzzBudgetExceeded as exc:
