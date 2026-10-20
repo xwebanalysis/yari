@@ -106,4 +106,5 @@ cd frontend && npm test && npm run build                 # 8 tests + production 
 
 ## License
 
-Part of the XWA ecosystem. No license file is shipped in this repository yet.
+Proprietary — All rights reserved. See [LICENSE](LICENSE) for the full terms.
+For permission requests: x@xscriptor.com
